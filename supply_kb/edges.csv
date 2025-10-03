@@ -1,0 +1,11 @@
+from_node,to_node,relation,weight
+material_lithium,supplier_catl,supplies,0.9
+material_cobalt,supplier_panasonic,supplies,0.7
+supplier_catl,plant_pune,supplies,0.85
+supplier_panasonic,plant_pune,supplies,0.7
+port_kandla,plant_pune,ships_to,0.6
+port_mundra,plant_sanand,ships_to,0.6
+plant_pune,plant_sanand,feeds,0.4
+plant_pune,plant_solihull,feeds,0.3
+
+

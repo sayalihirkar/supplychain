@@ -1,0 +1,12 @@
+node_id,node_type,location,materials_handled,tier,criticality_score
+plant_pune,plant,Pune,IN,"battery cells; vehicles",1,0.9
+plant_sanand,plant,Gujarat,IN,vehicles,1,0.8
+plant_solihull,plant,Solihull,UK,vehicles,1,0.7
+port_kandla,port,Kandla,IN,"lithium; cobalt; components",0,0.8
+port_mundra,port,Mundra,IN,"components; vehicles",0,0.7
+supplier_catl,supplier,Ningde,CN,"battery cells; lithium",2,0.85
+supplier_panasonic,supplier,Osaka,JP,"battery cells; cobalt",2,0.75
+material_lithium,material,Global,,0,0.95
+material_cobalt,material,Global,,0,0.85
+
+

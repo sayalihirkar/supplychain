@@ -1,0 +1,22 @@
+# Core
+pandas==2.0.3
+numpy==1.24.3
+requests==2.31.0
+python-dotenv==1.0.0
+feedparser==6.0.10
+
+# NLP
+spacy==3.6.0
+nltk==3.8.1
+
+# Visualization
+streamlit==1.25.0
+plotly==5.15.0
+
+# API
+fastapi==0.100.0
+uvicorn==0.23.1
+
+# Utils
+python-dateutil==2.8.2
+tqdm==4.65.0

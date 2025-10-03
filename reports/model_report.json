@@ -1,0 +1,18 @@
+{
+  "NER_model": "rule-assisted spaCy-disabled placeholder (to be replaced with transformer NER)",
+  "Classifier": {
+    "micro_f1": 0.270042194092827,
+    "macro_f1": 0.06722689075630252,
+    "mean_roc_auc": 0.9572469907958231,
+    "num_labels": 7
+  },
+  "Regressor": {
+    "rmse": 0.0002742604936543479,
+    "spearman": 0.9999999999999999
+  },
+  "splits": {
+    "train": 1828,
+    "test": 457
+  },
+  "notes": "Weak supervision via heuristic labels in risk_labels; severity from pipeline + features."
+}
