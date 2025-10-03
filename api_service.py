@@ -9,6 +9,8 @@ import json
 from rag_retriever import explain as rag_explain
 import os
 import google.generativeai as genai  # type: ignore
+from inference_local import predict as local_predict
+from data_ingestion import NewsFetcher, NewsProcessor
 
 
 DATASET_DIR = Path("Dataset")
@@ -45,6 +47,65 @@ def ingest_article(article: ArticleIn) -> Dict[str, Any]:
     with staging.open("a", encoding="utf-8") as f:
         f.write(json.dumps(article.dict()) + "\n")
     return {"status": "queued", "id": article.id}
+
+
+@app.post("/predict")
+def predict_article(body: ArticleIn) -> Dict[str, Any]:
+    res = local_predict(body.title, body.text, source=body.source)
+    return {"id": body.id, **res}
+
+
+@app.get("/news/search")
+def news_search(q: str = "Tata Motors", from_date: str | None = None, to_date: str | None = None) -> List[Dict[str, Any]]:
+    fetcher = NewsFetcher()
+    processor = NewsProcessor()
+    arts = fetcher.fetch_news_api(q, from_date=from_date, to_date=to_date)
+    df = processor.process_articles(arts)
+    results: List[Dict[str, Any]] = []
+    for _, r in df.iterrows():
+        results.append({
+            'id': r.get('url', ''),
+            'source': r.get('source', ''),
+            'published_at': r.get('published_at', ''),
+            'title': r.get('title', ''),
+            'text': r.get('content', ''),
+            'url': r.get('url', ''),
+            'tags': list(filter(None, [t.strip() for t in str(r.get('supply_chain_keywords','')).split(',') + str(r.get('strategic_keywords','')).split(',')]))
+        })
+    return results
+
+
+class CreateEventIn(BaseModel):
+    event_id: str
+    title: str
+    severity: float
+    risk_labels: list[str]
+    impacted_nodes: list[str]
+    evidence: list[str]
+    confidence: float | None = 0.7
+
+
+@app.post("/events/create")
+def events_create(body: CreateEventIn) -> Dict[str, Any]:
+    ev_path = DATASET_DIR / "live_events.csv"
+    import pandas as pd
+    rec = {
+        'event_id': body.event_id,
+        'detected_at': pd.Timestamp.utcnow().isoformat(),
+        'headline': body.title,
+        'risk_labels': json.dumps(body.risk_labels),
+        'severity': body.severity,
+        'impacted_nodes': json.dumps(body.impacted_nodes),
+        'evidence': json.dumps(body.evidence),
+        'confidence': body.confidence or 0.7,
+    }
+    if ev_path.exists():
+        df = pd.read_csv(ev_path)
+        df = pd.concat([df, pd.DataFrame([rec])], ignore_index=True)
+    else:
+        df = pd.DataFrame([rec])
+    df.to_csv(ev_path, index=False)
+    return {"status": "created", "event_id": body.event_id}
 
 
 @app.get("/events")

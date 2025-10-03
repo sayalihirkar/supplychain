@@ -45,36 +45,38 @@ def overview_heatmap(nodes: pd.DataFrame):
     st.plotly_chart(fig, use_container_width=True)
 
 
-def live_events_feed():
+def live_events_feed(limit: int = 20):
     st.subheader("Live Events")
     try:
-        ev = pd.read_csv(DATASET_DIR / "test_impact_events.csv").sort_values("severity", ascending=False)
+        ev = pd.read_csv(DATASET_DIR / "test_impact_events.csv").sort_values("severity", ascending=False).head(limit)
     except Exception:
         st.info("No events.")
         return
-    for _, r in ev.iterrows():
-        cols = st.columns([5, 2, 2, 3])
-        cols[0].markdown(f"**{r.get('headline','')}**")
-        cols[1].markdown(f"Severity: `{r.get('severity',0):.1f}`")
-        cols[2].markdown(f"Confidence: `{r.get('confidence',0):.2f}`")
+    # Render each item within its own form to stabilize Streamlit widget state
+    for idx, r in ev.reset_index(drop=True).iterrows():
         e_id = str(r.get('event_id',''))
-        btn_explain = cols[3].button("Explain", key=f"exp_{e_id}")
-        if btn_explain:
-            from rag_retriever import explain
-            st.code(explain(str(r.get('headline','')), top_k=5))
-
-        # Action row
-        a1, a2, a3 = st.columns([2, 2, 6])
-        with a1:
-            if st.button("Acknowledge", key=f"ack_{e_id}"):
+        with st.form(f"evt_form_{e_id}"):
+            cols = st.columns([5, 2, 2, 3])
+            cols[0].markdown(f"**{r.get('headline','')}**")
+            cols[1].markdown(f"Severity: `{r.get('severity',0):.1f}`")
+            cols[2].markdown(f"Confidence: `{r.get('confidence',0):.2f}`")
+            explain_clicked = cols[3].form_submit_button("Explain")
+            a1, a2, a3 = st.columns([2, 3, 7])
+            with a1:
+                ack_clicked = st.form_submit_button("Acknowledge")
+            with a2:
+                assignee = st.text_input("Assign to", value="analyst@tata.com", key=f"assign_to_{e_id}")
+                assign_clicked = st.form_submit_button("Assign")
+            if explain_clicked:
+                from rag_retriever import explain
+                st.markdown(explain(str(r.get('headline','')), top_k=5))
+            if ack_clicked:
                 try:
                     resp = requests.post("http://localhost:8000/events/" + e_id + "/ack", json={"user": "analyst", "comment": "ack via UI"})
                     st.success("Acknowledged" if resp.status_code == 200 else f"Ack failed: {resp.status_code}")
                 except Exception as ex:
                     st.error(f"Ack error: {ex}")
-        with a2:
-            assignee = st.text_input("Assign to", key=f"assignee_{e_id}", value="analyst@tata.com")
-            if st.button("Assign", key=f"assign_{e_id}"):
+            if assign_clicked:
                 try:
                     resp = requests.post("http://localhost:8000/events/" + e_id + "/assign", json={"assignee": assignee, "comment": "from UI"})
                     st.success("Assigned" if resp.status_code == 200 else f"Assign failed: {resp.status_code}")
@@ -97,6 +99,41 @@ def risk_matrix():
     fig = px.scatter(df, x='probability', y='impact', hover_name='title', color='impact', color_continuous_scale='RdYlGn_r')
     fig.update_layout(xaxis_title='Probability', yaxis_title='Impact (Severity)')
     st.plotly_chart(fig, use_container_width=True)
+
+
+def severity_scorecard(nodes: pd.DataFrame):
+    st.subheader("Severity Scorecard")
+    bins = pd.cut(nodes['severity'].fillna(0.0), bins=[-0.01, 3, 5, 8, 10], labels=['Low', 'Medium', 'High', 'Critical'])
+    counts = bins.value_counts().reindex(['Critical', 'High', 'Medium', 'Low'], fill_value=0)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Critical Nodes", int(counts['Critical']))
+    c2.metric("High Nodes", int(counts['High']))
+    c3.metric("Medium Nodes", int(counts['Medium']))
+    c4.metric("Low Nodes", int(counts['Low']))
+
+
+def use_case_demo():
+    st.subheader("Use-Case Demonstration")
+    st.caption("Examples: chip shortages, lithium price spikes, EV subsidy changes")
+    try:
+        ev = pd.read_csv(DATASET_DIR / "test_impact_events.csv")
+    except Exception:
+        st.info("No events available.")
+        return
+    keywords = {
+        'Chip Shortage': 'chip',
+        'Lithium Spike': 'lithium',
+        'EV Subsidy Change': 'subsidy'
+    }
+    for label, kw in keywords.items():
+        sub = ev[ev['headline'].str.lower().str.contains(kw, na=False)].head(3)
+        if sub.empty:
+            continue
+        with st.expander(f"{label}"):
+            for _, r in sub.iterrows():
+                st.markdown(f"- {r['headline']} | Severity `{r['severity']:.1f}` | Nodes: {r['impacted_nodes']}")
+            from rag_retriever import explain
+            st.markdown(explain(label + " news Tata Motors", top_k=5))
 
 
 def drilldown_panel():
@@ -124,7 +161,27 @@ def drilldown_panel():
 
 def main():
     st.title("Risk Intelligence — Real-time Dashboard")
+    st.markdown("Enter a headline and text to predict risk (model inference):")
+    with st.form("predict_form"):
+        title = st.text_input("Title", value="")
+        text = st.text_area("Text", value="")
+        submitted = st.form_submit_button("Predict")
+    if submitted:
+        try:
+            resp = requests.post("http://localhost:8000/predict", json={
+                "id": "adhoc-1", "source": "ui", "published_at": "", "title": title, "text": text, "url": ""
+            })
+            if resp.status_code == 200:
+                data = resp.json()
+                st.success(f"Risk level: {data.get('risk_level','')} | Severity: {data.get('severity_0_10',0):.2f}")
+                st.write({"risk_labels": data.get('risk_labels', []), "label_probabilities": data.get('label_probabilities', {})})
+                st.write({"events": data.get('events', []), "impacted_nodes": data.get('impacted_nodes', [])})
+            else:
+                st.error(f"Prediction failed: {resp.status_code}")
+        except Exception as ex:
+            st.error(f"Prediction error: {ex}")
     nodes = load_nodes()
+    severity_scorecard(nodes)
     overview_heatmap(nodes)
     col1, col2 = st.columns([2, 1])
     with col1:
@@ -132,6 +189,60 @@ def main():
         risk_matrix()
     with col2:
         drilldown_panel()
+    use_case_demo()
+
+    st.markdown("---")
+    st.subheader("Live News — Search, Review, Predict, Create Event")
+    with st.form("news_search"):
+        q = st.text_input("Query", value="Tata Motors supply chain")
+        submitted = st.form_submit_button("Search News")
+    if submitted:
+        try:
+            r = requests.get("http://localhost:8000/news/search", params={"q": q})
+            items = r.json() if r.status_code == 200 else []
+        except Exception:
+            items = []
+        if not items:
+            st.info("No news found.")
+        else:
+            for it in items[:10]:
+                with st.form(f"news_item_{hash(it['id'])}"):
+                    st.markdown(f"**{it['title']}**  ")
+                    st.caption(f"{it['source']} | {it['published_at']}")
+                    st.write((it.get('text','') or '')[:300] + '...')
+                    do_predict = st.form_submit_button("Predict Risk")
+                    make_event = st.form_submit_button("Create Event")
+                    if do_predict:
+                        pr = requests.post("http://localhost:8000/predict", json={
+                            "id": it['id'], "source": it['source'], "published_at": it['published_at'],
+                            "title": it['title'], "text": it.get('text',''), "url": it['url']
+                        })
+                        if pr.status_code == 200:
+                            data = pr.json()
+                            st.success(f"Severity {data.get('severity_0_10',0):.2f} | {data.get('risk_level','')}")
+                            st.write({"labels": data.get('risk_labels', []), "probs": data.get('label_probabilities', {})})
+                    if make_event:
+                        pr = requests.post("http://localhost:8000/predict", json={
+                            "id": it['id'], "source": it['source'], "published_at": it['published_at'],
+                            "title": it['title'], "text": it.get('text',''), "url": it['url']
+                        })
+                        sev = 0.0
+                        labels = []
+                        if pr.status_code == 200:
+                            data = pr.json()
+                            sev = float(data.get('severity_0_10', 0.0))
+                            labels = data.get('risk_labels', [])
+                        ce = requests.post("http://localhost:8000/events/create", json={
+                            "event_id": f"live-{hash(it['id'])}",
+                            "title": it['title'],
+                            "severity": sev,
+                            "risk_labels": labels,
+                            "impacted_nodes": [],
+                            "evidence": [it['id']],
+                            "confidence": 0.7
+                        })
+                        if ce.status_code == 200:
+                            st.success("Event created")
 
 
 if __name__ == '__main__':

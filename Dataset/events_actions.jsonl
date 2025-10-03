@@ -1,1 +1,2 @@
 {"event_id": "db652b7f56e985299d279ca152f7c47a4592b37a", "action": "acknowledge", "user": "analyst", "comment": "ack via UI"}
+{"event_id": "a0caa5737880c091a9d22befad5a63f84668c7dd", "action": "assign", "assignee": "analyst@tata.com", "comment": "from UI"}
